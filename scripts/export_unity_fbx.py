@@ -76,7 +76,9 @@ def main():
         mesh_smooth_type="FACE",
     )
     print(f"저장: {a.out}")
-    print("Unity: 임포트 -> Rig 탭 Humanoid -> Animation 탭에서 클립 확인 -> 씬 재생")
+    print("Unity: 임포트 -> Rig 탭 Generic -> Animation 탭에서 클립 확인 -> 씬 재생")
+    print("      Humanoid 로 두면 근육 변환에서 동작이 왜곡된다 (rest 가 T포즈가 아니라서).")
+    # T포즈 rest 리그 재생성은 별도 과제 EH-211.
 
 
 if __name__ == "__main__":

@@ -18,7 +18,10 @@ pkl 에 트랙이 여러 개면 첫 번째를 쓰고 경고합니다 (--track �
 그대로 진행하기 전에 overlay.mp4 를 확인하는 편이 좋습니다.
 """
 import argparse
+import os
 import sys
+
+from pathlib import Path
 
 import numpy as np
 
@@ -65,7 +68,9 @@ def main():
     if pose.shape[-1] != 72:
         raise RuntimeError(f"pose 형상이 (T,72) 가 아닙니다: {pose.shape}")
 
-    np.savez(a.out, pose=pose, trans=trans)
+    out_path = Path(os.path.expanduser(a.out))
+    out_path.parent.mkdir(parents=True, exist_ok=True)   # 규약 경로가 아직 없을 수 있다
+    np.savez(out_path, pose=pose, trans=trans)
     print(f"저장: {a.out}")
     print(f"  track={key}  pose {pose.shape}  trans {trans.shape}  ({pose.shape[0]}프레임)")
 
