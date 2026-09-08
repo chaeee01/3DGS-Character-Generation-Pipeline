@@ -104,10 +104,14 @@ fi
 # upstream --basic 목록에서 gradio(웹데모 전용), pillow-simd(sudo apt 필요 + Pillow 충돌) 제외.
 if [ $CHECK_ONLY = 0 ]; then
     log "[4/8] 기본 패키지"
-    # transformers 는 upstream 대로 핀 없이 둔다 — 5.x 가 요구하는 torch>=2.5 를 여기선
-    # 만족한다(2.6.0). 1세대의 "transformers<5" 핀은 torch 2.4 때문이었다.
+    # transformers 는 4.57.3 으로 고정한다. TRELLIS.2 의 image_feature_extractor 가
+    # DINOv3ViTModel 의 model.layer 평면 구조를 전제로 순회하는데(86행), 5.x 에서는
+    # model.model.layer 로 한 겹 깊어져 AttributeError 가 난다.
+    # upstream setup.sh 의 무핀은 작성 시점 버전의 암묵 전제다 — 레포 개발 기간
+    # (2025-11-26 ~ 12-23) 내내 최신 4.x 가 4.57.3(2025-11-25)이었고 5.0.0 은
+    # 2026-01-26 로 그 뒤다. 런타임 호환(torch>=2.5)이 아니라 코드가 부르는 API 가 제약이다.
     pip install imageio imageio-ffmpeg tqdm easydict opencv-python-headless ninja \
-        trimesh transformers tensorboard pandas lpips zstandard kornia timm
+        trimesh "transformers==4.57.3" tensorboard pandas lpips zstandard kornia timm
     # utils3d 는 upstream 이 커밋을 고정해 둔 것 (1세대와 같은 핀).
     python -c "import utils3d" 2>/dev/null || \
         pip install git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
