@@ -212,15 +212,8 @@ def main():
     mb = os.path.getsize(glb_path) / 2 ** 20
     print(f"[4/4] GLB {t_glb:.0f}s  정점 {n_v:,}  면 {n_f:,}  {mb:.1f}MB → {glb_path}")
 
-    if args.video:
-        hdri = args.hdri or os.path.join(args.trellis2_root, "assets/hdri/forest.exr")
-        envmap = EnvMap(torch.tensor(
-            cv2.cvtColor(cv2.imread(hdri, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB),
-            dtype=torch.float32, device="cuda"))
-        video = render_utils.make_pbr_vis_frames(render_utils.render_video(mesh, envmap=envmap))
-        imageio.mimsave(os.path.join(out, "preview.mp4"), video, fps=15)
-        print("      턴테이블 저장: preview.mp4")
-
+    # 텍스처·params.json 을 먼저 남긴다. 미리보기(--video)는 부가물인데 그것이 죽으면
+    # 필수 기록까지 날아가는 순서였다 (2026-09-08 스모크에서 실제로 겪음).
     tex_dir, slots = None, {}
     if not args.no_tex:
         tex_dir = os.path.join(out, "textures")
@@ -261,6 +254,28 @@ def main():
         "torch": torch.__version__,
         "date": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
+    # --video 는 마지막에, 실패해도 진행. opencv-python-headless 는 OpenEXR 코덱을
+    # 포함하지 않아(build 정보 OpenEXR: NO) HDRI(.exr) 를 못 읽는다. 1·2세대 통제
+    # 비교는 scripts/render_glb_compare.py 로 하므로 미리보기는 필수가 아니다.
+    video_status = "skipped"
+    if args.video:
+        try:
+            hdri = args.hdri or os.path.join(args.trellis2_root, "assets/hdri/forest.exr")
+            raw = cv2.imread(hdri, cv2.IMREAD_UNCHANGED)
+            if raw is None:
+                raise RuntimeError(f"HDRI 를 읽지 못했다: {hdri} "
+                                   f"(opencv {cv2.__version__} 에 OpenEXR 코덱이 없을 수 있다)")
+            envmap = EnvMap(torch.tensor(cv2.cvtColor(raw, cv2.COLOR_BGR2RGB),
+                                         dtype=torch.float32, device="cuda"))
+            video = render_utils.make_pbr_vis_frames(render_utils.render_video(mesh, envmap=envmap))
+            imageio.mimsave(os.path.join(out, "preview.mp4"), video, fps=15)
+            video_status = "ok"
+            print("      턴테이블 저장: preview.mp4")
+        except Exception as e:
+            video_status = f"failed({type(e).__name__}: {e})"
+            print(f"[경고] 턴테이블 렌더 실패 — 산출물에는 영향 없음: {video_status}")
+    params["video"] = video_status
+
     with open(os.path.join(out, "params.json"), "w") as f:
         json.dump(params, f, indent=2, ensure_ascii=False)
     print(f"완료 {params['time_s']['total']:.0f}s → {out}")
