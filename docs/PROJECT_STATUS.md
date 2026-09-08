@@ -1,6 +1,6 @@
 # 좀비 영상 → 유니티 아바타 파이프라인 — 진행 상황 정리
 
-작성일: 2026-08-11 (최종 갱신: 2026-08-20)
+작성일: 2026-08-11 (최종 갱신: 2026-09-07)
 레포: [Video2UnityAvatar-Pipeline](https://github.com/chaeee01/Video2UnityAvatar-Pipeline) — 초기 이름 `3DGS-Character-Generation-Pipeline`에서 개명. SuGaR(3DGS) 기반 복원을 설계에서 제외하면서 이름이 실제 구성과 어긋나 정리함.
 목표: 좀비 영상 한 편을 입력하면 SAM2로 객체를 분리하고, TRELLIS로 외형을, WHAM으로 동작을 복원한 뒤 유니티 에셋(아바타 + 애니메이션)으로 반입하는 파이프라인 구축.
 
@@ -166,10 +166,12 @@ WHAM betas(체형) + 키프레임 pose(자세) → 그 좀비와 같은 자세·
 
 ## 8. 최근 작업
 
+<!-- 항목은 날짜 오름차순. 새 항목은 맨 아래에 추가 -->
+
 - **2026-08-13 — 레포 정리 완료**: 브랜치 통합(SAM2 노트북 6개를 main으로 merge 후 원격 브랜치 4개 삭제), 구조 재편(`docs/` `notebooks/sam2/` `scripts/` `pipeline/qa/` `docker/`), 흩어져 있던 스크립트 8종 회수, 레포 개명 및 README 갱신.
 - **2026-08-18**: TRELLIS-SMPL 정렬 검증 통과. 자세 일치 육안 확인 — 상체 기울기·스트라이드·팔 위치 대응, 어긋남은 의복 두께 수준. 파라미터: Rot X -90°, Scale 0.588 (TRELLIS 1.001/SMPL 1.702), Location Y -2.58.
 
-![정렬 검증](assets/align_check_frame.png)
+<p align="center"><img src="assets/align_check_frame.png" width="500"></p>
 
 - **2026-08-20**: 정렬 자동화 검증 — 자동 계산이 수동 측정 재현 (scale 0.5884, offset Y -2.629, bbox IoU 0.717). IoU가 정렬 게이트 판정 지표 후보로 확보됨.
 
@@ -199,20 +201,21 @@ WHAM betas(체형) + 키프레임 pose(자세) → 그 좀비와 같은 자세·
 
 **포즈 시험 통과**: L_Shoulder·R_Shoulder·R_Knee 회전 시 해당 부위 메쉬가 관절 경계에서 분리되어 자연스럽게 변형됨을 육안 확인.
 
-![포즈 시험 - R_Knee](assets/pose_test_knee.png)
+<p align="center"><img src="assets/pose_test_knee.png" width="500"></p>
 
 - **2026-08-21**: 캐릭터 에셋 4종 완성 (외형+리깅+텍스처, 애니메이션 없음). 좀비 파이프라인의 외형 경로가 신규 입력 4종에 그대로 재현됨. Mixamo 텍스처 소실 → GLB 추출 재연결 패턴도 동일.
 
-![캐릭터 에셋 4종](assets/char_assets_4.png)
+<p align="center"><img src="assets/char_assets_4.png" width="500"></p>
 
 - **2026-08-24**: 4단계 통과 — WHAM 69프레임이 리깅 좀비에서 원본 영상과 동일 패턴으로 재생. 웨이트 전이는 2단계 방식(0.08 정밀 + 전파) 확정. 발견: 찢어진 옷자락은 본체와 분리된 고립 섬(5.4만 정점)이라 자동 전이의 구조적 예외 — 별도 과제로 분리, G1a/G2 게이트에 부유 지오메트리 플래그 요건 추가.
 
-![Blender 재생 검증 (Unity 반입 전 단계)](assets/wham_playback_blender.gif)
+<p align="center"><img src="assets/wham_playback_blender.gif" width="480"></p>
 
 - **2026-08-24**: M1 달성 — Unity 반입 완료. Generic Rig로 임포트(rest가 T포즈가 아니므로 Humanoid 근육 변환 회피), Animator 재생으로 원본 영상 동작 재현 확인. 수동 파이프라인 전 구간(영상→SAM2→TRELLIS/WHAM→SMPL 리깅→Unity) 관통.
 - **2026-08-25**: SAM2 RunPod 이전 완료 — Colab 의존 제거, 전 단계가 볼륨+레포 체계로 통일. 발견: 테스트 영상 실측 24fps, 키프레임 자동 후보에 수동 선택 프레임(f7) 포함 — G1a 설계 참고.
 - **2026-08-27**: 좀비 영상 4종 소싱 완료 — Gemini 생성으로 확보 (저작권·초상권 무결). 스펙: 4종 동일 규격 240프레임/24fps/720p/10초, 전 항목 합격. 내용 검증: 1인·컷 없음·팔 벌린 키프레임·카메라 고정·AI 아티팩트 없음 육안 확인. 미결 2건: ①AI 생성 영상의 WHAM 적합성 미검증 — W2 좀비 2호 리허설이 첫 시험, 실패 시 직접 촬영 폴백 ②720p는 하한 — TRELLIS 품질 확인 후 필요시 1080p 재생성.
 - **2026-08-28 — W1 주간 마무리 (M1 달성)**: 수동 파이프라인이 영상→에셋 전 구간을 관통했다. M1 체크리스트 다섯 항목(WHAM 동작 Unity 재생 · 통합 데모 GIF · main 머지 · runbook · SAM2 레포 반입)이 8/27에 모두 충족되어 목표 8/31보다 4일 앞섰다. 핵심은 v4의 SMPL 골격 직접 리깅이 실증된 것으로, 정렬 IoU 0.717 · 관절-메쉬 거리 0.028 · 웨이트 무배정 0%로 리타게팅 없이 WHAM 동작이 재생됐다. SAM2가 Colab에서 볼륨으로 옮겨오면서 전 단계가 레포+볼륨 체계로 통일됐고, 입력 영상 4종도 확보했다. W2(9/1~9/5) 목표는 자동화의 전제 조건인 **TRELLIS 로컬 설치**(Space 의존 제거)와 스크립트 CLI·경로 규약 표준화, 그리고 runbook 리허설을 겸한 좀비 2호 수동 제작이다. 2호 제작이 AI 생성 영상의 WHAM 적합성을 가리는 첫 시험이기도 하다.
+- **2026-09-02**: TRELLIS 로컬 설치 검증 완료 (W2 화 목표) — 볼륨 micromamba trellis 환경(py3.10 / torch 2.4.0+cu121 / CUDA 툴체인 내장), 스모크 111s · VRAM 9.7GB · Space 품질 동등. Space 의존 제거. 실질 생성 26s. 발견: 설치 병목은 볼륨 I/O(36분). TRELLIS.2 전환 검토는 백로그(P3). 검증 중 발견·수정 2건 — [8/8] 검증 루프가 `__version__` 없는 패키지(utils3d)에서 죽는 버그, transformers 무핀 설치(→ `<5` 고정).
 - **2026-09-03**: 경로 규약 확정 + 스크립트 CLI 표준화 (W2 목) — `data/` 번호를 실행 순서대로 재배열(`05_wham`→`04_wham`, `06_smpl_mesh`→`05_smpl_mesh`, `01_pre`·`06_rig`·`07_unity` 신설)하고 `docs/CONVENTIONS.md`·`config.yaml`을 신규 작성했다. 폴더 번호와 S번호는 독립된 식별자로 못박았다. 스크립트 6건의 인자를 규약에 맞췄고(출력 `--out` 통일, 샘플명 기본값 제거, `--smpl`/`--frame` 이름 충돌 해소), RUNBOOK을 신번호와 TRELLIS 로컬 절차로 갱신했다. 발견: `pipeline/qa/`의 게이트·오케스트레이터·config.yaml은 **문서 기록과 달리 실물이 없었다**(맥북에도 없음 확인) — W4 게이트는 검증된 스크립트의 판정 로직(정렬 IoU, 웨이트 무배정률, 키프레임 후보 점수, 재투영) 기반 신규 설계로 간다.
 - **2026-09-04 — 좀비 2호 리허설 (부분 달성)**: zombie1으로 S2~S5 + 5-1을 관통했다. SAM2 마스크 240/240, TRELLIS 87s(정점 5,307/면 7,276, peak VRAM 9.79GB), WHAM 49s(트랙 1개, 포즈 표준편차 0.4162), SMPL 메쉬 생성까지 완료. **AI 생성 영상의 WHAM 적합성이 확정**돼 8/27 미결 ①을 종결했다 — overlay 육안 판정에서 스켈레톤이 전 구간 정합했고 손목·손끝만 가끔 이탈(WHAM 말단 관절 특성, 허용). 판정 기준 "몸통·대관절 엄격, 말단 관대"를 G3 설계 메모로 남겼다. 리깅 사슬(5-2~6, 맥북 Blender)은 이월. 어긋남 7건을 기록해 RUNBOOK 5곳과 스크립트 2건을 고쳤다.
 
@@ -227,8 +230,7 @@ WHAM betas(체형) + 키프레임 pose(자세) → 그 좀비와 같은 자세·
 
   **어긋남 8~11**: ⑧ `convert_wham_npz.py`가 출력 폴더를 만들지 않아 규약 경로 첫 실행에서 죽음 ⑨ RUNBOOK 5-2에 육안 확인 수단 없음(캡처 스크립트 `render_align_check.py` 신규) + 5-3 포즈 시험이 웨이트 전이 전이라 대상이 안 움직임(5-4로 이동) ⑩ `transfer_weights.py`의 BFS가 UV 심에서 끊겨 표면상 이어진 곳도 직선거리 폴백으로 떨어짐(zombie1 3.0%, 무해 — 기록만) ⑪ `export_unity_fbx.py` 안내가 Humanoid로 RUNBOOK의 Generic과 반대. ⑧⑨⑪ 수정 완료, ⑩은 CONVENTIONS 미정리 목록에 기록.
 
-![zombie1 원본 vs 리깅 재생](assets/zombie1_original_vs_rig.gif)
-- **2026-09-02**: TRELLIS 로컬 설치 검증 완료 (W2 화 목표) — 볼륨 micromamba trellis 환경(py3.10 / torch 2.4.0+cu121 / CUDA 툴체인 내장), 스모크 111s · VRAM 9.7GB · Space 품질 동등. Space 의존 제거. 실질 생성 26s. 발견: 설치 병목은 볼륨 I/O(36분). TRELLIS.2 전환 검토는 백로그(P3). 검증 중 발견·수정 2건 — [8/8] 검증 루프가 `__version__` 없는 패키지(utils3d)에서 죽는 버그, transformers 무핀 설치(→ `<5` 고정).
+<p align="center"><img src="assets/zombie1_original_vs_rig.gif" width="560"></p>
 
 ---
 
