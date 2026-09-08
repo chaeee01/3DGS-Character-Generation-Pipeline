@@ -163,9 +163,11 @@ else
 fi
 
 # ---------------------------------------------------------------- 7. CUDA 확장 5종
-build_ext() {   # 이름 URL 클론옵션 서브경로  (URL 이 "-" 면 레포 동봉 소스)
-    local mod=$1 url=$2 opt=$3 sub=$4 dir=$EXT_DIR/$1
-    if python -c "import $mod" 2>/dev/null; then echo "  - $mod: 있음"; return; fi
+# 배포명과 import 명이 다른 확장이 있다 (nvdiffrec → nvdiffrec_render,
+# FlexGEMM → flex_gemm). 겸용하면 성공한 빌드를 실패로 판정한다.
+build_ext() {   # 레이블 import명 URL 클론옵션 서브경로  (URL 이 "-" 면 레포 동봉 소스)
+    local mod=$1 imp=$2 url=$3 opt=$4 sub=$5 dir=$EXT_DIR/$1
+    if python -c "import $imp" 2>/dev/null; then echo "  - $mod: 있음 (import $imp)"; return; fi
     [ $CHECK_ONLY = 1 ] && { echo "  - $mod: 없음"; return; }
     if [ "$url" = "-" ]; then
         rm -rf "$dir"; cp -r "$REPO/$sub" "$dir"; sub="."
@@ -175,16 +177,16 @@ build_ext() {   # 이름 URL 클론옵션 서브경로  (URL 이 "-" 면 레포 
     echo "  - $mod: 빌드 ($dir/$sub)"
     pip install --no-build-isolation -v "$dir/$sub" 2>&1 | tee $LOG_DIR/build_${mod}.log \
         | grep -E "error|Error|Successfully|warning: unsupported" || true
-    python -c "import $mod" || { echo "  ! $mod 빌드 실패 — $LOG_DIR/build_${mod}.log 확인"; exit 1; }
+    python -c "import $imp" || { echo "  ! $mod 빌드 실패 (import $imp) — $LOG_DIR/build_${mod}.log 확인"; exit 1; }
 }
 log "[7/8] CUDA 확장 (nvdiffrast / nvdiffrec / cumesh / flexgemm / o_voxel)"
 mkdir -p $EXT_DIR
 [ $CHECK_ONLY = 1 ] || pip install setuptools wheel ninja >/dev/null
-build_ext nvdiffrast https://github.com/NVlabs/nvdiffrast.git        "-b v0.4.0"     "."
-build_ext nvdiffrec  https://github.com/JeffreyXiang/nvdiffrec.git   "-b renderutils" "."
-build_ext cumesh     https://github.com/JeffreyXiang/CuMesh.git      "--recursive"   "."
-build_ext flexgemm   https://github.com/JeffreyXiang/FlexGEMM.git    "--recursive"   "."
-build_ext o_voxel    -                                               ""              "o-voxel"
+build_ext nvdiffrast nvdiffrast       https://github.com/NVlabs/nvdiffrast.git      "-b v0.4.0"      "."
+build_ext nvdiffrec  nvdiffrec_render https://github.com/JeffreyXiang/nvdiffrec.git "-b renderutils" "."
+build_ext cumesh     cumesh           https://github.com/JeffreyXiang/CuMesh.git    "--recursive"    "."
+build_ext flexgemm   flex_gemm        https://github.com/JeffreyXiang/FlexGEMM.git  "--recursive"    "."
+build_ext o_voxel    o_voxel          -                                             ""               "o-voxel"
 
 # ---------------------------------------------------------------- 8. 검증
 log "[8/8] import 검증"
@@ -197,8 +199,9 @@ if torch.cuda.is_available():
     p = torch.cuda.get_device_properties(0)
     print(f"  VRAM {p.total_memory/2**30:.1f}GB  sm_{p.major}{p.minor}")
 import numpy; print("numpy", numpy.__version__)
+# import 명 기준 — 배포명(nvdiffrec, FlexGEMM)과 다른 것이 있다.
 mods = ["torchvision", "utils3d", "trimesh", "kornia", "timm", "transformers",
-        "nvdiffrast", "nvdiffrec", "cumesh", "flexgemm", "o_voxel"]
+        "nvdiffrast", "nvdiffrec_render", "cumesh", "flex_gemm", "o_voxel"]
 try:
     import flash_attn; backend = "flash_attn"
 except ImportError:
