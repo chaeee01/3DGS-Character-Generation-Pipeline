@@ -125,15 +125,28 @@ if [ $CHECK_ONLY = 0 ]; then
     elif python -c "import flash_attn" 2>/dev/null; then
         log "[5/8] flash-attn 재사용"
     else
-        log "[5/8] flash-attn 2.7.3 설치 (prebuilt 없으면 소스 빌드, 오래 걸림)"
+        log "[5/8] flash-attn 2.7.3 설치 (prebuilt 휠 직접)"
         pip install packaging wheel >/dev/null
+        # prebuilt 휠을 URL 로 직접 설치한다. `pip install flash-attn==2.7.3` 은 설치기가
+        # 휠을 받아 pip 캐시로 os.rename 하다 죽는다 — 받은 위치(/tmp, 컨테이너 로컬)와
+        # PIP_CACHE_DIR(/workspace, MooseFS)가 다른 파일시스템이라 EXDEV(Errno 18).
+        # flash-attn setup.py 가 shutil.move 대신 os.rename 을 쓰는 탓이다.
+        #
+        # URL 에 torch2.6 / cp310 / cxx11abiFALSE 가 박혀 있다 — [3/8] 의 torch 버전이나
+        # [2/8] 의 python 버전을 바꾸면 이 URL 도 함께 갱신해야 한다. ABI 는
+        # torch._C._GLIBCXX_USE_CXX11_ABI 값과 일치해야 한다 (현재 False).
+        FA_WHL="https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.3/flash_attn-2.7.3+cu12torch2.6cxx11abiFALSE-cp310-cp310-linux_x86_64.whl"
         # 자동 폴백하지 않는다. attention 백엔드는 실험 조건이라 조용히 바뀌면
-        # 1세대와의 대조가 무너진다. 실패하면 멈추고, 폴백은 --attn xformers 로 명시한다.
-        if ! pip install flash-attn==2.7.3 --no-build-isolation 2>&1 | tee $LOG_DIR/build_flash_attn.log | tail -5; then
+        # 1세대와의 대조가 무너진다. 실패하면 멈추고, 우회는 사람이 고른다.
+        if ! pip install "$FA_WHL" 2>&1 | tee $LOG_DIR/build_flash_attn.log | tail -5; then
             echo ""
-            echo "  ! flash-attn 설치 실패 — 로그: $LOG_DIR/build_flash_attn.log"
-            echo "    자동 폴백하지 않는다 (백엔드는 실험 조건). xformers 로 가려면 명시하라:"
-            echo "      bash scripts/setup_trellis2.sh --attn xformers"
+            echo "  ! flash-attn prebuilt 휠 설치 실패 — 로그: $LOG_DIR/build_flash_attn.log"
+            echo "    자동 진행하지 않는다. 아래 중 하나를 사람이 고른다:"
+            echo "      1) 버전 독립 우회 (pip 캐시를 로컬 디스크로 두어 EXDEV 회피):"
+            echo "         PIP_CACHE_DIR=/root/.cache/pip pip install flash-attn==2.7.3 --no-build-isolation"
+            echo "      2) 백엔드 교체 (실험 조건이 바뀌므로 기록 필요):"
+            echo "         bash scripts/setup_trellis2.sh --attn xformers"
+            echo "    URL 이 404 면 torch/python/ABI 조합이 바뀐 것이다 — FA_WHL 을 갱신하라."
             exit 1
         fi
     fi
