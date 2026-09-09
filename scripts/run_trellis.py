@@ -50,7 +50,9 @@ def parse_args():
     ap.add_argument("--ss-cfg", type=float, default=7.5, help="sparse structure guidance")
     ap.add_argument("--slat-steps", type=int, default=12, help="structured latent 샘플링 스텝")
     ap.add_argument("--slat-cfg", type=float, default=3.0, help="structured latent guidance")
-    ap.add_argument("--simplify", type=float, default=0.95, help="메쉬 단순화 비율 (Space 0.9~0.98)")
+    ap.add_argument("--simplify", type=float, default=0.95,
+                    help="제거할 면의 비율. 0=단순화 없음, 0.95=95%% 제거 (Space 기본 0.9~0.98). "
+                         "1.0 은 전부 제거라 빈 메쉬가 되어 GLB 변환이 죽는다")
     ap.add_argument("--texture-size", type=int, default=2048, choices=[512, 1024, 1536, 2048])
     ap.add_argument("--multi-mode", default="stochastic", choices=["stochastic", "multidiffusion"],
                     help="다중 뷰 결합 방식 (Space 기본 stochastic)")

@@ -107,6 +107,37 @@ def detect_backend():
         return "xformers"
 
 
+def glb_mesh_stats(glb_path):
+    """내보낸 GLB 에서 정점·면 수를 센다.
+
+    to_glb() 는 데시메이션(decimation_target)·리메시·UV 심 분리를 거치므로 그 이전의
+    mesh.vertices 와 실물 GLB 의 정점 수가 다르다 (512: 509,128 → 671,643 증가,
+    1024: 2,187,551 → 797,746 감소). 산출물의 통계를 기록해야 하므로 파일에서 센다.
+    """
+    with open(glb_path, "rb") as f:
+        data = f.read()
+    off, js = 12, None
+    while off < len(data):
+        ln, typ = struct.unpack_from("<II", data, off)
+        if typ == 0x4E4F534A:
+            js = json.loads(data[off + 8: off + 8 + ln].decode("utf-8"))
+            break
+        off += 8 + ln + ((4 - ln % 4) % 4)
+    if not js:
+        return None, None
+    acc = js.get("accessors", [])
+    v = f_ = 0
+    for m in js.get("meshes", []):
+        for prim in m.get("primitives", []):
+            pi = prim.get("attributes", {}).get("POSITION")
+            if pi is not None:
+                v += acc[pi]["count"]
+            ii = prim.get("indices")
+            if ii is not None:
+                f_ += acc[ii]["count"] // 3
+    return v, f_
+
+
 def texture_slots(glb_path):
     """GLB 의 material 슬롯 → 이미지 인덱스 매핑을 읽는다.
 
@@ -208,7 +239,9 @@ def main():
     glb_path = os.path.join(out, f"{name}.glb")
     glb.export(glb_path, extension_webp=True)
     t_glb = time.time() - t0
-    n_v, n_f = len(mesh.vertices), len(mesh.faces)
+    # to_glb 이후 실물 GLB 기준으로 센다 (변환 전 mesh 와 다르다).
+    n_v, n_f = glb_mesh_stats(glb_path)
+    n_v_pre, n_f_pre = len(mesh.vertices), len(mesh.faces)
     mb = os.path.getsize(glb_path) / 2 ** 20
     print(f"[4/4] GLB {t_glb:.0f}s  정점 {n_v:,}  면 {n_f:,}  {mb:.1f}MB → {glb_path}")
 
@@ -244,6 +277,9 @@ def main():
         "glb": glb_path,
         "vertices": n_v,
         "faces": n_f,
+        "vertices_source": "glb",          # 실물 GLB 에서 셌다
+        "vertices_pre_export": n_v_pre,    # to_glb 이전 메쉬 (참고용)
+        "faces_pre_export": n_f_pre,
         "glb_mb": round(mb, 2),
         "textures": tex_dir,
         "texture_slots": slots,
