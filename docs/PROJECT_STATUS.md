@@ -217,11 +217,19 @@ WHAM betas(체형) + 키프레임 pose(자세) → 그 좀비와 같은 자세·
 - **2026-08-28 — W1 주간 마무리 (M1 달성)**: 수동 파이프라인이 영상→에셋 전 구간을 관통했다. M1 체크리스트 다섯 항목(WHAM 동작 Unity 재생 · 통합 데모 GIF · main 머지 · runbook · SAM2 레포 반입)이 8/27에 모두 충족되어 목표 8/31보다 4일 앞섰다. 핵심은 v4의 SMPL 골격 직접 리깅이 실증된 것으로, 정렬 IoU 0.717 · 관절-메쉬 거리 0.028 · 웨이트 무배정 0%로 리타게팅 없이 WHAM 동작이 재생됐다. SAM2가 Colab에서 볼륨으로 옮겨오면서 전 단계가 레포+볼륨 체계로 통일됐고, 입력 영상 4종도 확보했다. W2(9/1~9/5) 목표는 자동화의 전제 조건인 **TRELLIS 로컬 설치**(Space 의존 제거)와 스크립트 CLI·경로 규약 표준화, 그리고 runbook 리허설을 겸한 좀비 2호 수동 제작이다. 2호 제작이 AI 생성 영상의 WHAM 적합성을 가리는 첫 시험이기도 하다.
 - **2026-09-02**: TRELLIS 로컬 설치 검증 완료 (W2 화 목표) — 볼륨 micromamba trellis 환경(py3.10 / torch 2.4.0+cu121 / CUDA 툴체인 내장), 스모크 111s · VRAM 9.7GB · Space 품질 동등. Space 의존 제거. 실질 생성 26s. 발견: 설치 병목은 볼륨 I/O(36분). TRELLIS.2 전환 검토는 백로그(P3). 검증 중 발견·수정 2건 — [8/8] 검증 루프가 `__version__` 없는 패키지(utils3d)에서 죽는 버그, transformers 무핀 설치(→ `<5` 고정).
 - **2026-09-03**: 경로 규약 확정 + 스크립트 CLI 표준화 (W2 목) — `data/` 번호를 실행 순서대로 재배열(`05_wham`→`04_wham`, `06_smpl_mesh`→`05_smpl_mesh`, `01_pre`·`06_rig`·`07_unity` 신설)하고 `docs/CONVENTIONS.md`·`config.yaml`을 신규 작성했다. 폴더 번호와 S번호는 독립된 식별자로 못박았다. 스크립트 6건의 인자를 규약에 맞췄고(출력 `--out` 통일, 샘플명 기본값 제거, `--smpl`/`--frame` 이름 충돌 해소), RUNBOOK을 신번호와 TRELLIS 로컬 절차로 갱신했다. 발견: `pipeline/qa/`의 게이트·오케스트레이터·config.yaml은 **문서 기록과 달리 실물이 없었다**(맥북에도 없음 확인) — W4 게이트는 검증된 스크립트의 판정 로직(정렬 IoU, 웨이트 무배정률, 키프레임 후보 점수, 재투영) 기반 신규 설계로 간다.
+- **2026-09-04 — 좀비 2호 리허설 (부분 달성)**: S2~S5 + 5-1 관통, AI 생성 영상의 WHAM 적합성 확정.
+  리깅 사슬(5-2~6)은 이월. 환경 표류 사건과 품질 이슈 상세는 아래를 편다.
+
+<details><summary>2026-09-04 상세 — 실측치 · 환경 표류 사건 · 품질 이슈</summary>
+
 - **2026-09-04 — 좀비 2호 리허설 (부분 달성)**: zombie1으로 S2~S5 + 5-1을 관통했다. SAM2 마스크 240/240, TRELLIS 87s(정점 5,307/면 7,276, peak VRAM 9.79GB), WHAM 49s(트랙 1개, 포즈 표준편차 0.4162), SMPL 메쉬 생성까지 완료. **AI 생성 영상의 WHAM 적합성이 확정**돼 8/27 미결 ①을 종결했다 — overlay 육안 판정에서 스켈레톤이 전 구간 정합했고 손목·손끝만 가끔 이탈(WHAM 말단 관절 특성, 허용). 판정 기준 "몸통·대관절 엄격, 말단 관대"를 G3 설계 메모로 남겼다. 리깅 사슬(5-2~6, 맥북 Blender)은 이월. 어긋남 7건을 기록해 RUNBOOK 5곳과 스크립트 2건을 고쳤다.
 
   **환경 표류 사건**: WHAM이 첫 실행에서 `torchvision.ops.nms` C++ ops 로드 실패로 죽었다. 원인은 **8/5에 pytorch3d를 micromamba로 수동 설치하면서 torch가 2.0.0 → 1.12.1로 조용히 다운그레이드**된 것이다. `setup_wham.sh`가 명시한 조합(torch 2.0.0 + torchvision 0.15.1)에서 이탈했는데, `nms`는 YOLO 검출 경로에서만 쓰여 8/5·8/18 실행에서는 드러나지 않았다. 복구 과정에서 두 가지를 더 밟았다 — ① `pip install --force-reinstall`이 **numpy를 1.22.3 → 2.0.2로 끌어올려** torch·scipy의 numpy 1.x ABI가 깨졌고(핀 복원으로 해결), ② conda가 지운 `pyyaml`의 **pip 메타데이터가 고아로 남아** `pip install pyyaml`이 "이미 설치됨"으로 건너뛰었다(`--force-reinstall --no-deps`로 해결). 복구 후 검증 5종(버전/import/nms/YOLO 실검출/SMPL 로드) 전부 통과. `run_wham.sh`가 파이프 종료 코드 문제로 실패를 "완료"로 보고하던 버그도 이날 발견·수정했다(pipefail + 산출물 존재 검사). **교훈: `setup_wham.sh`·`setup_sam2`에도 `setup_trellis.sh`의 [8/8] 급 import·조합 검증 단계가 필요하다.** 스크립트 밖 수동 설치가 환경을 표류시키고, 그 표류는 특정 코드 경로를 밟기 전까지 드러나지 않는다.
 
   **품질 이슈(미해결)**: TRELLIS 결과의 머리가 부풀고 뒤통수가 뭉개졌다. `input_0.png`는 깨끗해 마스킹 문제가 아니며, 단일 뷰의 뒷면 상상 한계 + 720p(bbox 682px → 518² 다운스케일)로 인한 얼굴 정보 부족으로 추정한다. 1080p 재생성 비교 시험은 별도 카드. **G1a/G2 설계 메모: TRELLIS용 bbox 높이 하한은 WHAM 기준(256px)보다 높아야 한다.** 또 하나 — SAM2 키프레임 topk 5장이 **연속 프레임(f227~f231)에 몰려** 다중 뷰로 쓸 수 없었다. G1a는 후보를 구간별 최고점으로 뽑아야 한다.
+
+</details>
+
 - **2026-09-07 — 좀비 2호 완주 + 리허설 종료**: Pod 재검증 2건(`run_wham.sh` pipefail·산출물 검사, `generate_smpl_mesh.py` 샘플명 유추)이 통과해 두 커밋의 "Pod 검증 전" 꼬리표를 해제했다. 리깅 사슬을 맥북에서 전 구간 관통했다 — **정렬 bbox IoU 0.797**(기준선 0.717), **관절-메쉬 거리 0.0293**(기준선 0.028, 차순위와 90배 차이로 identity 선택), **웨이트 무배정 0%**, 240프레임 베이킹 후 Unity Generic Rig 반입·재생까지 확인해 **2호 재현에 성공**했다. S6 좌표 관례도 종결 — Unity 기본 카메라 기준 후면을 향하는 것은 월드 배치 관례이며 걷는 방향과 몸 방향이 일치함을 확인했다(루트 회전 오차 의혹 해소). 9/4에 확정한 AI 생성 영상 적합성 판정의 시각 근거도 자산으로 반입했다([WHAM 재투영 오버레이](assets/zombie1_wham_overlay.png)).
 
   **고립 섬 비재현**: zombie1의 TRELLIS 메쉬는 연결 요소가 148개로 보였으나 거리 병합(1e-4) 시 **1개**로 합쳐졌다 — 전부 glTF 임포트의 UV 심 정점 분리였고 물리적 고립 섬은 0개다. zombie_sample1의 "찢어진 옷자락 5.4만 정점 고립 섬"은 재현되지 않았다. 다만 그쪽은 Space 출력(고밀도)이고 이쪽은 `simplify 0.95`(5,307 정점)라 직접 비교는 성립하지 않는다 — **"이 메쉬 밀도에서는 나타나지 않는다"**가 정확하다. G2의 부유 지오메트리 플래그는 simplify 값 조건부로 설계한다.
@@ -230,7 +238,8 @@ WHAM betas(체형) + 키프레임 pose(자세) → 그 좀비와 같은 자세·
 
   **어긋남 8~11**: ⑧ `convert_wham_npz.py`가 출력 폴더를 만들지 않아 규약 경로 첫 실행에서 죽음 ⑨ RUNBOOK 5-2에 육안 확인 수단 없음(캡처 스크립트 `render_align_check.py` 신규) + 5-3 포즈 시험이 웨이트 전이 전이라 대상이 안 움직임(5-4로 이동) ⑩ `transfer_weights.py`의 BFS가 UV 심에서 끊겨 표면상 이어진 곳도 직선거리 폴백으로 떨어짐(zombie1 3.0%, 무해 — 기록만) ⑪ `export_unity_fbx.py` 안내가 Humanoid로 RUNBOOK의 Generic과 반대. ⑧⑨⑪ 수정 완료, ⑩은 CONVENTIONS 미정리 목록에 기록.
 
-<p align="center"><img src="assets/zombie1_original_vs_rig.gif" width="560"></p>
+<p align="center"><img src="assets/zombie1_original_vs_rig.gif" width="560"><br>
+<sub><b>1세대(TRELLIS 1) 리깅 재생 (9/7)</b> — 원본 영상(좌) vs 리깅 좀비(우)</sub></p>
 
 - **2026-09-09 — TRELLIS.2 전환 완료**: 1세대에서 2세대로 갈아끼우고 zombie1 을 영상→Unity 전 구간 재관통했다. 이틀(9/8~9/9)에 걸친 작업이고, 라이선스 확인 → 환경 구축 → 스모크 → 통제 실험 → 관통 순서로 진행했다.
 
@@ -254,7 +263,8 @@ WHAM betas(체형) + 키프레임 pose(자세) → 그 좀비와 같은 자세·
 
 <p align="center"><img src="assets/align_gen1_vs_gen2.png" width="500"></p>
 
-<p align="center"><img src="assets/zombie1_t2_original_vs_rig.gif" width="560"></p>
+<p align="center"><img src="assets/zombie1_t2_original_vs_rig.gif" width="560"><br>
+<sub><b>2세대(TRELLIS.2) 리깅 재생 (9/9)</b> — 원본 영상(좌) vs 리깅 좀비(우)</sub></p>
 
 ---
 
