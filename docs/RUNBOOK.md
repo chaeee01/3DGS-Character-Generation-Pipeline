@@ -138,60 +138,59 @@ python /workspace/repos/Video2UnityAvatar-Pipeline/scripts/run_sam2.py \
 
 ---
 
-## 3. TRELLIS — 외형 복원 (S3)
+## 3. TRELLIS.2 — 외형 복원 (S3)
 
 ```bash
-micromamba activate trellis
-python /workspace/repos/Video2UnityAvatar-Pipeline/scripts/run_trellis.py \
-    --image /workspace/data/02_sam2/zombie_sample1/keyframes/key3_f00007.png \
-    --out   /workspace/data/03_trellis/zombie_sample1 \
-    --video
+micromamba activate trellis2
+python /workspace/repos/Video2UnityAvatar-Pipeline/scripts/run_trellis2.py \
+    --image /workspace/data/02_sam2/<샘플>/keyframes/<키프레임>.png \
+    --out   /workspace/data/03_trellis/gen2/<샘플> \
+    --pipeline-type 512
 ```
 
-`--image`는 2단계 `keyframes/`에서 고른 RGBA PNG다. 좋은 프레임이 2장 이상이면 여러 개를
-넘긴다(방위각 45° 이상 차이). `--video`는 턴테이블 mp4를 함께 렌더한다(+1~2분, 육안 확인용).
+`--pipeline-type` 이 해상도 다이얼이다 — `512` / `1024` / `1024_cascade` / `1536_cascade`.
+`--image` 는 이미지 **1장만** 받는다 (upstream `run()` 이 그렇다). `--video` 는 HDRI 를
+요구하는데 `opencv-python-headless` 에 OpenEXR 코덱이 없어 실패한다 — 통제 비교는
+`scripts/render_glb_compare.py` 로 한다.
 
 **산출물** (`--out` 아래):
 
 | 경로 | 용도 |
 |---|---|
-| `<이름>.glb` | 메쉬 + 베이크 텍스처 → **5-2 정렬 입력** |
-| `textures/<이름>_tex_0.png` | 2048² 텍스처 → **Unity Material** |
-| `input_0.png` | 모델이 실제로 본 전처리 입력(알파 crop → 518²). G1a 디버깅용 |
-| `params.json` | 입력·파라미터·시간·VRAM·메쉬 통계 |
-| `preview_gs.mp4` / `preview_mesh.mp4` | `--video` 지정 시 턴테이블 |
+| `<이름>.glb` | PBR 메쉬 → **5-2 정렬 입력** |
+| `textures/<이름>_tex_0.png` | baseColor → **Unity Base Map** |
+| `textures/<이름>_tex_1.png` | metallicRoughness → 6절 채널 규약 참조 |
+| `input_0.png` | 모델이 실제로 본 전처리 입력 |
+| `params.json` | 파라미터·시간·VRAM·메쉬 통계 + `texture_slots` 매핑 |
 
-**소요 시간** (4090, 키프레임 1장, 2026-09-02 실측):
+**소요 시간** (RTX 4090, 2026-09-08 실측):
 
-| 구간 | 첫 실행 | 이후 |
+| 구간 | 512 | 1024 |
 |---|---|---|
-| 모델 다운로드 + 로드 | ~80s | **~56s** (다운로드만 생략, 볼륨→GPU 로드는 매번 발생) |
-| 생성 | ~6s | ~6s |
-| GLB 변환 (단순화 + 2048² 베이킹) | ~20s | ~20s |
-| **총계** | **~111s** | **~85s** |
+| 모델 로드 | ~155s | ~158s |
+| 생성 | ~22s | ~53s |
+| GLB 변환 | ~20s | ~51s |
+| **총계** | **~196s** | **~262s** |
+| **peak VRAM** | **2.6GB** | **3.1GB** |
+
+모델 로드 155초는 15.12GB 가중치를 볼륨에서 읽는 시간이라 매 실행 발생한다.
+VRAM 은 해상도의 병목이 아니다(`low_vram=True` 가 모델을 CPU 에 두고 필요할 때만 올린다) —
+비용은 시간에 붙는다. 24GB GPU 로 충분하다.
 
 ### 확인 포인트
-- `params.json`의 `input_has_alpha`가 `true`인지 본다. `false`면 rembg가 배경을 뗀 것이라
-  마스크 품질을 의심해야 한다 (로그에 `[경고] 알파 없음`이 찍힌다).
-- `peak_vram_gb` **~9.7GB** (24GB 중 40%). 크게 벗어나면 파라미터가 달라진 것이다.
-- 정점·면 수도 `params.json`에 남는다 (실측 4,770 / 6,552). 이전 실행과 대조한다.
-- GLB를 Blender에 임포트해 **뒷면**을 본다. 앞면만 그럴듯한 경우가 있다.
-- 얼굴 디테일은 기대하지 않는다 — 좀비 컨셉에서는 허용 범위로 판단했다.
+- `params.json` 의 `input_has_alpha` 가 `true` 인지. `false` 면 RMBG 가 배경을 뗀 것이다.
+- `peak_vram_gb` (512 기준 2.6GB), `vertices` (실물 GLB 기준으로 기록된다).
+- `texture_slots` 에 baseColor·metallicRoughness 매핑이 있는지 — 6절에서 쓴다.
+- GLB 를 Blender 에 임포트해 **뒷면**을 본다. 2세대는 뒤통수가 뭉개지지 않고 찢어진 옷이
+  구멍으로 표현되는 것이 정상이다.
 
 ### 흔한 실패
-- **환경 혼동** — `trellis` 환경에서 돌려야 한다. `wham`/`sam2`에는 TRELLIS가 없다.
-- **알파 없는 입력** — SAM2 키프레임은 RGBA라 정상이지만, 다른 경로로 만든 PNG를 넣으면
-  rembg(u2net)를 타서 마스크가 달라진다. 경고를 흘려보내지 않는다.
-- **transformers 배너** — 실행 첫머리의 `[transformers] Disabling PyTorch …` 두 줄은
-  무해하다. 이미지 경로는 transformers를 타지 않는다.
-- **텍스처 소실** — GLB를 FBX로 변환하거나 Mixamo를 경유하면 텍스처가 떨어져 나간다.
-  FBX에서 되살리려 하지 말고 **원본 GLB에서 직접 추출**한다:
-
-  ```bash
-  python scripts/glb_tex.py char1.glb ~/data/03_trellis/char1/textures
-  ```
-
-  캐릭터가 여러 개면 출력 폴더를 반드시 나눈다(파일명이 겹친다).
+- **환경 혼동** — `trellis2` 환경이다. 1세대는 `trellis` 로 따로 있다.
+- **게이트 리포 접근** — DINOv3(`facebook/dinov3-vitl16-*`)와 RMBG(`briaai/RMBG-2.0`)가
+  게이트다. HF 접근 승인 + `HF_TOKEN` 환경변수가 필요하다. 없으면 파이프라인 생성 자체가
+  실패한다. RMBG 는 알파 있는 입력에서는 호출되지 않지만 로드는 무조건 된다.
+- **transformers 버전** — 4.57.3 으로 고정돼 있다. 5.x 는 DINOv3ViTModel 구조가 달라져
+  `AttributeError: 'DINOv3ViTModel' object has no attribute 'layer'` 가 난다.
 
 ---
 
@@ -381,7 +380,20 @@ Unity에서:
    > `smpl_tpose.obj` 기반으로 **T포즈 rest 리그를 재생성**해야 한다 — 별도 과제 EH-211.
    > Humanoid로 억지 설정하면 근육 변환 과정에서 동작이 왜곡된다.
 
-2. Material 생성 → URP **Base Map**에 3단계에서 추출한 baseColor 텍스처를 연결한다.
+2. Material 생성 → URP **Base Map**에 3단계의 baseColor 텍스처를 연결한다.
+   어느 파일이 어느 슬롯인지는 `params.json` 의 `texture_slots` 를 본다.
+
+   > **PBR 텍스처 채널 규약 (2세대).** TRELLIS.2 는 텍스처를 2장 낸다. glTF 는
+   > metallicRoughness 를 한 장에 묶는데 **G = roughness, B = metallic** 이고,
+   > Unity URP 는 **Metallic Map 의 R = metallic, A = smoothness(= 1 − roughness)** 로
+   > 다르게 읽는다. 그대로 물리면 금속·거칠기가 뒤바뀌므로 채널을 재배치하거나,
+   > 값이 균일하면 텍스처 대신 슬라이더로 대체한다.
+   >
+   > 최종 metallic = `metallicFactor` × 텍스처 B 다. GLB 의 `metallicFactor` 가 1.0 이면
+   > (2세대 기본값. 1세대는 키 자체가 없어 glTF 기본 1.0) Unity 가 Metallic 슬라이더를
+   > 1.0 으로 잡을 수 있다. **좀비가 금속처럼 번쩍이면 이것부터 확인한다.**
+   > zombie1 512 실측은 텍스처 B 평균 1.0/255 로 사실상 비금속이라 Metallic 0 으로 두면 된다.
+   > 1024 는 B 평균 254.7 로 전신 금속이라 별도 규명 대상이다.
 3. Animator Controller를 만들어 FBX 안의 클립을 물리고 재생한다.
 
 ### 확인 포인트
@@ -390,6 +402,7 @@ Unity에서:
 
 ### 흔한 실패
 - **Humanoid로 설정** — 위 트레이드오프 상자를 보라. 동작이 미끄러지거나 팔이 접히면 이걸 의심한다.
+- **금속처럼 번쩍임** — `metallicFactor` 가 1.0 이거나 채널 규약이 어긋난 것이다. 위 상자를 보라.
 - **텍스처가 회색으로 나옴** — Material 연결을 빠뜨린 것이다. FBX에 텍스처가 임베드돼 있지 않으면
   3단계에서 추출한 PNG를 직접 연결한다.
 
@@ -429,6 +442,69 @@ IP·포트를 명령에 적지 않는다. 접속 정보는 `~/.ssh/config`의 `H
   규약 경로 `~/data`는 TCC 보호 대상이 아니라 이 문제를 피한다 — 예전 산출물이 `~/Desktop`에
   남아 있을 때만 해당된다.
 - **Terminate 잊음** — 초당 과금이다. 작업이 끝났으면 바로 지운다.
+
+---
+
+## 부록: 레거시 — TRELLIS 1세대 (S3)
+
+2026-09-09 에 TRELLIS.2 로 전환했다. 1세대 절차는 대조군·기준선 재현용으로 남긴다.
+산출물은 `03_trellis/gen1/` 에 둔다.
+
+### 3. TRELLIS 1세대 — 외형 복원 (S3)
+
+```bash
+micromamba activate trellis
+python /workspace/repos/Video2UnityAvatar-Pipeline/scripts/run_trellis.py \
+    --image /workspace/data/02_sam2/zombie_sample1/keyframes/key3_f00007.png \
+    --out   /workspace/data/03_trellis/zombie_sample1 \
+    --video
+```
+
+`--image`는 2단계 `keyframes/`에서 고른 RGBA PNG다. 좋은 프레임이 2장 이상이면 여러 개를
+넘긴다(방위각 45° 이상 차이). `--video`는 턴테이블 mp4를 함께 렌더한다(+1~2분, 육안 확인용).
+
+**산출물** (`--out` 아래):
+
+| 경로 | 용도 |
+|---|---|
+| `<이름>.glb` | 메쉬 + 베이크 텍스처 → **5-2 정렬 입력** |
+| `textures/<이름>_tex_0.png` | 2048² 텍스처 → **Unity Material** |
+| `input_0.png` | 모델이 실제로 본 전처리 입력(알파 crop → 518²). G1a 디버깅용 |
+| `params.json` | 입력·파라미터·시간·VRAM·메쉬 통계 |
+| `preview_gs.mp4` / `preview_mesh.mp4` | `--video` 지정 시 턴테이블 |
+
+**소요 시간** (4090, 키프레임 1장, 2026-09-02 실측):
+
+| 구간 | 첫 실행 | 이후 |
+|---|---|---|
+| 모델 다운로드 + 로드 | ~80s | **~56s** (다운로드만 생략, 볼륨→GPU 로드는 매번 발생) |
+| 생성 | ~6s | ~6s |
+| GLB 변환 (단순화 + 2048² 베이킹) | ~20s | ~20s |
+| **총계** | **~111s** | **~85s** |
+
+### 확인 포인트
+- `params.json`의 `input_has_alpha`가 `true`인지 본다. `false`면 rembg가 배경을 뗀 것이라
+  마스크 품질을 의심해야 한다 (로그에 `[경고] 알파 없음`이 찍힌다).
+- `peak_vram_gb` **~9.7GB** (24GB 중 40%). 크게 벗어나면 파라미터가 달라진 것이다.
+- 정점·면 수도 `params.json`에 남는다 (실측 4,770 / 6,552). 이전 실행과 대조한다.
+- GLB를 Blender에 임포트해 **뒷면**을 본다. 앞면만 그럴듯한 경우가 있다.
+- 얼굴 디테일은 기대하지 않는다 — 좀비 컨셉에서는 허용 범위로 판단했다.
+
+### 흔한 실패
+- **환경 혼동** — `trellis` 환경에서 돌려야 한다. `wham`/`sam2`에는 TRELLIS가 없다.
+- **알파 없는 입력** — SAM2 키프레임은 RGBA라 정상이지만, 다른 경로로 만든 PNG를 넣으면
+  rembg(u2net)를 타서 마스크가 달라진다. 경고를 흘려보내지 않는다.
+- **transformers 배너** — 실행 첫머리의 `[transformers] Disabling PyTorch …` 두 줄은
+  무해하다. 이미지 경로는 transformers를 타지 않는다.
+- **텍스처 소실** — GLB를 FBX로 변환하거나 Mixamo를 경유하면 텍스처가 떨어져 나간다.
+  FBX에서 되살리려 하지 말고 **원본 GLB에서 직접 추출**한다:
+
+  ```bash
+  python scripts/glb_tex.py char1.glb ~/data/03_trellis/char1/textures
+  ```
+
+  캐릭터가 여러 개면 출력 폴더를 반드시 나눈다(파일명이 겹친다).
+
 
 ---
 

@@ -12,7 +12,8 @@
 | 00 | `00_raw` | G0 입력 | 원본 영상 |
 | 01 | `01_pre` | S0 · S1 | fps/해상도/색공간 정규화 클립, 컷 분할 클립 |
 | 02 | `02_sam2` | S2 | 마스크, 마스킹 클립, 키프레임 후보, `candidates.json` |
-| 03 | `03_trellis` | S3 | GLB, `textures/`, `params.json`, 턴테이블 프리뷰 |
+| 03 | `03_trellis/gen2/` | S3 | **TRELLIS.2 산출물** — PBR GLB, `textures/`(baseColor·metallicRoughness), `params.json` |
+| 03 | `03_trellis/gen1/` | S3 (레거시) | TRELLIS 1세대 산출물. 대조군·기준선 재현용으로 보존 |
 | 04 | `04_wham` | S5 | `wham_output.pkl`, `overlay.mp4` |
 | 05 | `05_smpl_mesh` | S4 입력 | `smpl_frame<N>.obj`, `smpl_tpose.obj`, `joints_frame<N>.json`, `smpl_faces.npy` |
 | 06 | `06_rig` | S4 · S6 · S7 중간물 | `aligned/rigged/transferred/animated.blend`, `aligned_params.json`, `wham_pose.npz` |
@@ -41,9 +42,17 @@ S번호를 추정하지 말 것. **S번호는 이 규약과 무관하게 바뀌�
 `docs/PROJECT_STATUS.md` 의 **날짜가 박힌 일지 항목은 소급 수정하지 않는다.** 그 시점의
 사실을 그대로 두고, 읽을 때 이 대응표로 해석한다.
 
-> **임시**: TRELLIS.2 전환 실험 동안 2세대 산출물은 `03_trellis2/` 에 따로 쌓는다.
-> 1세대 결과(`03_trellis/`)가 통제 실험의 대조군이라 섞이면 안 되기 때문이다.
-> 번호표에 없는 폴더이며, 전환이 확정되면 `03_trellis` 로 승격하고 이 문단을 삭제한다.
+### 세대 병기 구조 (03_trellis)
+
+S3 는 생성 모델을 갈아끼울 수 있는 단계다 — 2026-09-09 에 TRELLIS 1세대에서 TRELLIS.2 로
+전환했고, 앞으로도 같은 일이 반복될 수 있다. 그래서 번호를 새로 파지 않고 `03_trellis`
+아래에 세대 폴더를 둔다. 새 세대로 넘어가도 번호표가 흔들리지 않고, 이전 세대 산출물이
+대조군·기준선으로 그대로 남는다.
+
+> **임시**: 볼륨의 실물 이동(`03_trellis2/*` → `03_trellis/gen2/`, 기존
+> `03_trellis/*` → `03_trellis/gen1/`)은 **다음 Pod 세션의 첫 작업**이다. 맥북 미러도 같은
+> 구조로 정리한다. 이동 전까지는 볼륨·미러가 옛 구조(`03_trellis/`, `03_trellis2/`)이므로
+> 스크립트 기본값과 실제 경로가 다를 수 있다. 이동을 마치면 이 문단을 삭제한다.
 
 ### 맥북 미러
 
