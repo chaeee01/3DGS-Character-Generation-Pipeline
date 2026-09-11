@@ -144,9 +144,13 @@ python /workspace/repos/Video2UnityAvatar-Pipeline/scripts/run_sam2.py \
 micromamba activate trellis2
 python /workspace/repos/Video2UnityAvatar-Pipeline/scripts/run_trellis2.py \
     --image /workspace/data/02_sam2/<샘플>/keyframes/<키프레임>.png \
-    --out   /workspace/data/03_trellis/gen2/<샘플> \
-    --pipeline-type 512
+    --out   /workspace/data/03_trellis/gen2/<샘플>
 ```
+
+**기본값이 `--pipeline-type 1024` 이고 `--force-dielectric` 이 켜져 있다** — 둘 다 생략해도
+적용된다 (근거는 `docs/CONVENTIONS.md` 7절). 512 는 속도가 우선일 때 명시적으로 고른다:
+얇은 천을 몸에 융합시키고 색 채도를 56~69% 잃는다. 원본 metallic 을 보존하려면
+`--no-force-dielectric` 을 준다 (대조·측정용).
 
 `--pipeline-type` 이 해상도 다이얼이다 — `512` / `1024` / `1024_cascade` / `1536_cascade`.
 `--image` 는 이미지 **1장만** 받는다 (upstream `run()` 이 그렇다). `--video` 는 HDRI 를
@@ -177,10 +181,24 @@ python /workspace/repos/Video2UnityAvatar-Pipeline/scripts/run_trellis2.py \
 VRAM 은 해상도의 병목이 아니다(`low_vram=True` 가 모델을 CPU 에 두고 필요할 때만 올린다) —
 비용은 시간에 붙는다. 24GB GPU 로 충분하다.
 
+> **생성 시간은 해상도가 아니라 형상 복잡도에 좌우된다.** 위 표의 "1024 가 512 의 2.4배" 는
+> zombie1 단일 샘플 관측이고 일반화되지 않는다 — walker 는 512 가 79.6s, 1024 가 35.7s 로
+> **1024 가 더 빨랐다**. 같은 512 설정에서도 22.1s ↔ 79.6s 로 3.6배 차이난다(2026-09-10 실측).
+> 해상도를 시간 근거로 고를 때는 고정 배수가 아니라 범위로 다룬다.
+
+**후처리 — `--force-dielectric`** (기본 켜짐): GLB 의 `metallicFactor` 를 0 으로 눌러 저장한다.
+모델이 광택 있는 어두운 옷을 금속으로 오판하는 일이 잦은데(stalker 512·zombie1 1024 에서
+MR 텍스처 B 평균 254.7), 그대로 두면 Unity 에서 빛을 삼키는 검은 덩어리가 된다. 로그에
+`force-dielectric: metallicFactor [1.0] -> 0.0` 이 찍힌다. 기하는 바뀌지 않는다.
+
 ### 확인 포인트
 - `params.json` 의 `input_has_alpha` 가 `true` 인지. `false` 면 RMBG 가 배경을 뗀 것이다.
 - `peak_vram_gb` (512 기준 2.6GB), `vertices` (실물 GLB 기준으로 기록된다).
 - `texture_slots` 에 baseColor·metallicRoughness 매핑이 있는지 — 6절에서 쓴다.
+- **metallic 점검** — `textures/<이름>_tex_1.png` 의 **B 채널 평균이 32 이하**여야 한다
+  (G2 잠정 임계값). 초과하면 모델이 금속으로 오판한 것이다. `--force-dielectric` 이
+  렌더를 구제하지만 표면 디테일과 채도는 돌아오지 않으므로, **다른 seed 로 재생성을
+  먼저 시도**한다. 2026-09-10 4샘플 중 2건(stalker 254.7, dog 51.5)이 걸렸다.
 - GLB 를 Blender 에 임포트해 **뒷면**을 본다. 2세대는 뒤통수가 뭉개지지 않고 찢어진 옷이
   구멍으로 표현되는 것이 정상이다.
 
