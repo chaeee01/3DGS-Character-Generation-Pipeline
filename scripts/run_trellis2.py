@@ -52,9 +52,17 @@ def parse_args():
     ap.add_argument("--model", default="microsoft/TRELLIS.2-4B")
     ap.add_argument("--seed", type=int, default=0,
                     help="기본 0 — 1세대 run_trellis.py 와 맞춘 값 (upstream 기본은 42)")
-    ap.add_argument("--pipeline-type", default="512",
+    ap.add_argument("--pipeline-type", default="1024",
                     choices=["512", "1024", "1024_cascade", "1536_cascade"],
-                    help="해상도 다이얼. 비용 곡선 측정용으로 512/1024 를 각각 재 본다")
+                    help="해상도 다이얼. 기본 1024 — 512 는 얇은 천을 몸에 융합시키고 "
+                         "색 채도를 56~69%% 잃는다 (docs/CONVENTIONS.md 8절)")
+    ap.add_argument("--force-dielectric", dest="force_dielectric",
+                    action="store_true", default=True,
+                    help="material 의 metallicFactor 를 0 으로 눌러 저장 (기본 켜짐). "
+                         "인간형 좀비 도메인에서 metallic 은 항상 0 에 가깝다")
+    ap.add_argument("--no-force-dielectric", dest="force_dielectric",
+                    action="store_false",
+                    help="모델이 낸 metallicFactor 를 그대로 둔다 (원본 대조·측정용)")
     ap.add_argument("--max-num-tokens", type=int, default=49152, help="upstream 기본값")
     ap.add_argument("--decimation-target", type=int, default=1000000,
                     help="to_glb 데시메이션 목표 정점 수 (upstream 예제 1000000). "
@@ -136,6 +144,48 @@ def glb_mesh_stats(glb_path):
             if ii is not None:
                 f_ += acc[ii]["count"] // 3
     return v, f_
+
+
+def force_dielectric(glb_path):
+    """GLB 의 모든 material 에서 metallicFactor 를 0 으로 만든다 (제자리 수정).
+
+    TRELLIS.2 는 입력의 재질감을 읽어 PBR 을 추정하는데, 광택 있는 어두운 옷에서
+    금속으로 오판한다 (2026-09-10 실측: stalker 512 에서 MR 텍스처 B 평균 254.7,
+    zombie1 1024 에서 254.7). 최종 metallic 은 metallicFactor x 텍스처 B 이므로
+    factor 를 0 으로 두면 텍스처와 무관하게 비금속이 된다.
+
+    한계: 이것은 응급 처치이지 복구가 아니다. 모델이 "금속" 으로 판단한 시점에
+    baseColor 에 어둡고 평탄한 알베도가 이미 구워지므로(glTF 금속 규약상 baseColor 가
+    확산광이 아니라 반사율을 담는다) 표면 디테일과 채도는 돌아오지 않는다.
+    G2 게이트는 불합격 시 재생성을 먼저 시도하고 이 보정을 차선으로 둔다.
+
+    반환: 바꾼 material 개수와 이전 값 목록.
+    """
+    with open(glb_path, "rb") as f:
+        raw = f.read()
+    magic, ver, total = struct.unpack("<III", raw[:12])
+    if magic != 0x46546C67:
+        raise RuntimeError(f"glTF 바이너리가 아님: {glb_path}")
+    off, chunks = 12, []
+    while off < total:
+        clen, ctype = struct.unpack("<II", raw[off:off + 8])
+        chunks.append([ctype, raw[off + 8: off + 8 + clen]])
+        off += 8 + clen
+    js = json.loads(chunks[0][1].decode("utf-8"))
+    before = []
+    for m in js.get("materials", []):
+        pbr = m.setdefault("pbrMetallicRoughness", {})
+        before.append(pbr.get("metallicFactor", 1.0))
+        pbr["metallicFactor"] = 0.0
+    if not before:
+        return 0, []
+    newjs = json.dumps(js, separators=(",", ":")).encode("utf-8")
+    newjs += b" " * ((4 - len(newjs) % 4) % 4)      # glTF 는 4바이트 정렬을 요구한다
+    chunks[0][1] = newjs
+    body = b"".join(struct.pack("<II", len(c[1]), c[0]) + c[1] for c in chunks)
+    with open(glb_path, "wb") as f:
+        f.write(struct.pack("<III", magic, ver, 12 + len(body)) + body)
+    return len(before), before
 
 
 def texture_slots(glb_path):
@@ -239,6 +289,11 @@ def main():
     glb_path = os.path.join(out, f"{name}.glb")
     glb.export(glb_path, extension_webp=True)
     t_glb = time.time() - t0
+    n_mat, mf_before = 0, []
+    if args.force_dielectric:
+        n_mat, mf_before = force_dielectric(glb_path)
+        if n_mat:
+            print(f"      force-dielectric: metallicFactor {mf_before} -> 0.0 ({n_mat}개 material)")
     # to_glb 이후 실물 GLB 기준으로 센다 (변환 전 mesh 와 다르다).
     n_v, n_f = glb_mesh_stats(glb_path)
     n_v_pre, n_f_pre = len(mesh.vertices), len(mesh.faces)
@@ -274,6 +329,8 @@ def main():
         "texture_size": args.texture_size,
         "simplify_limit": args.simplify_limit,
         "attn_backend": backend,
+        "force_dielectric": bool(args.force_dielectric),
+        "metallic_factor_before": mf_before,   # 보정 전 값 (비교·감사용)
         "glb": glb_path,
         "vertices": n_v,
         "faces": n_f,
